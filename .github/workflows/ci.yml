@@ -33,7 +33,7 @@ jobs:
     needs: test
     permissions:
       contents: write
-    uses: strongo/cicd/.github/workflows/workflow.yml@main
+    uses: strongo/cicd/.github/workflows/workflow.yml@5d96b1f3fbb3f12bb1e2762ff5ba54ccb9506504
     secrets:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     with:
