@@ -27,7 +27,7 @@ jobs:
       - name: Lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.4
+          version: v2.13.2
 
   strongo_workflow:
     needs: test
