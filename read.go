@@ -182,10 +182,27 @@ func makeRecordsReader(compiled compiledQuery, query dal.StructuredQuery, rows [
 	return dal.NewRecordsReader(records), nil
 }
 
+// keyIdentity is a text no two distinct keys share: every component is written as its type
+// and its value, each length-prefixed, so ("a b","c") and ("a","b c") differ, and so do 1 and "1".
+func keyIdentity(id any) string {
+	component := func(name string, value any) string {
+		text := fmt.Sprintf("%T:%v", value, value)
+		return fmt.Sprintf("%d:%s%d:%s;", len(name), name, len(text), text)
+	}
+	if fields, ok := id.([]dalrecord.FieldVal); ok {
+		identity := "composite;"
+		for _, field := range fields {
+			identity += component(field.Name, field.Value)
+		}
+		return identity
+	}
+	return component("", id)
+}
+
 // rememberKey fails the read when the response repeats a primary key: within one read, no two
 // records share a key.
 func rememberKey(seen map[string]int, row int, key *dalrecord.Key) error {
-	identity := fmt.Sprint(key.ID)
+	identity := keyIdentity(key.ID)
 	if first, repeated := seen[identity]; repeated {
 		return fmt.Errorf("%w: records %d and %d share the primary key %v", ErrInvalidResponse, first, row, key.ID)
 	}

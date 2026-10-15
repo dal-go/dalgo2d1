@@ -224,3 +224,50 @@ func TestAResponseRepeatingAPrimaryKeyIsInvalid(t *testing.T) {
 		}
 	}
 }
+
+func TestAResponseRepeatingAPrimaryKeyIsInvalidWhenReadIntoARecord(t *testing.T) {
+	schema := ukSchema()
+	tables := ukTables()
+	tables["Invoice"] = append(tables["Invoice"], tables["Invoice"][0])
+	server := httptest.NewServer(ukHandler(schema, tables))
+	defer server.Close()
+	db, err := New(server.URL, schema, WithInsecureLoopbackForTesting())
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := ukFrom("Invoice").NewQuery().SelectIntoRecord(func() dalrecord.Record {
+		return dalrecord.NewRecordWithData(dalrecord.NewKeyWithID("Invoice", "x"), map[string]any{})
+	})
+	if _, err := ukReadAll(t, db, q); !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("err=%v, want ErrInvalidResponse", err)
+	}
+}
+
+// Keys that differ in a component's type or in where the components split are distinct.
+func TestKeyIdentityIsTypeAwareAndUnambiguous(t *testing.T) {
+	comp := func(a, b any) any {
+		return []dalrecord.FieldVal{{Name: "x", Value: a}, {Name: "y", Value: b}}
+	}
+	distinct := [][2]any{
+		{comp("a b", "c"), comp("a", "b c")},
+		{comp("a", "bc"), comp("ab", "c")},
+		{int64(1), "1"},
+		{comp(int64(1), "z"), comp("1", "z")},
+		{comp("a", "b"), "a"},
+	}
+	for i, pair := range distinct {
+		if keyIdentity(pair[0]) == keyIdentity(pair[1]) {
+			t.Fatalf("case %d: %v and %v share an identity", i, pair[0], pair[1])
+		}
+	}
+	if keyIdentity(comp("a", int64(1))) != keyIdentity(comp("a", int64(1))) {
+		t.Fatal("equal keys must share an identity")
+	}
+	seen := map[string]int{}
+	if err := rememberKey(seen, 0, dalrecord.NewKeyWithID("c", int64(1))); err != nil {
+		t.Fatal(err)
+	}
+	if err := rememberKey(seen, 1, dalrecord.NewKeyWithID("c", "1")); err != nil {
+		t.Fatalf("1 and \"1\" are not duplicates: %v", err)
+	}
+}
