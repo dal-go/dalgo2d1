@@ -260,7 +260,8 @@ func TestKeyIdentityIsTypeAwareAndUnambiguous(t *testing.T) {
 			t.Fatalf("case %d: %v and %v share an identity", i, pair[0], pair[1])
 		}
 	}
-	if keyIdentity(comp("a", int64(1))) != keyIdentity(comp("a", int64(1))) {
+	first, second := comp("a", int64(1)), comp("a", int64(1))
+	if keyIdentity(first) != keyIdentity(second) {
 		t.Fatal("equal keys must share an identity")
 	}
 	seen := map[string]int{}
