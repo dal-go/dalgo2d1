@@ -136,7 +136,8 @@ func filtersForKey(key *dalrecord.Key, schema CollectionSchema) ([]queryFilter, 
 
 func makeRecordsReader(compiled compiledQuery, query dal.StructuredQuery, rows []map[string]any, schema CollectionSchema) (dal.RecordsReader, error) {
 	records := make([]dalrecord.Record, 0, len(rows))
-	for _, row := range rows {
+	seenKeys := make(map[string]int, len(rows))
+	for i, row := range rows {
 		data := projectRow(row, compiled.projection, compiled.allColumns, schema)
 		var result dalrecord.Record
 		if intoRecord := query.IntoRecord(); intoRecord != nil {
@@ -154,12 +155,22 @@ func makeRecordsReader(compiled compiledQuery, query dal.StructuredQuery, rows [
 				if err != nil {
 					return nil, err
 				}
+				if err := rememberKey(seenKeys, i, key); err != nil {
+					return nil, err
+				}
 				result.Key().ID = key.ID
 				result.Key().IDKind = key.IDKind
+			} else if result.Key() != nil {
+				// A keyless source has no key to give: do not leave the caller's, which the
+				// caller's constructor may hand to every record alike.
+				result.Key().ID = nil
 			}
 		} else if len(schema.PrimaryKey) != 0 {
 			key, err := keyFromRow(compiled.collection, row, schema)
 			if err != nil {
+				return nil, err
+			}
+			if err := rememberKey(seenKeys, i, key); err != nil {
 				return nil, err
 			}
 			result = dalrecord.NewRecordWithData(key, data)
@@ -169,6 +180,34 @@ func makeRecordsReader(compiled compiledQuery, query dal.StructuredQuery, rows [
 		records = append(records, result)
 	}
 	return dal.NewRecordsReader(records), nil
+}
+
+// keyIdentity is a text no two distinct keys share: every component is written as its type
+// and its value, each length-prefixed, so ("a b","c") and ("a","b c") differ, and so do 1 and "1".
+func keyIdentity(id any) string {
+	component := func(name string, value any) string {
+		text := fmt.Sprintf("%T:%v", value, value)
+		return fmt.Sprintf("%d:%s%d:%s;", len(name), name, len(text), text)
+	}
+	if fields, ok := id.([]dalrecord.FieldVal); ok {
+		identity := "composite;"
+		for _, field := range fields {
+			identity += component(field.Name, field.Value)
+		}
+		return identity
+	}
+	return component("", id)
+}
+
+// rememberKey fails the read when the response repeats a primary key: within one read, no two
+// records share a key.
+func rememberKey(seen map[string]int, row int, key *dalrecord.Key) error {
+	identity := keyIdentity(key.ID)
+	if first, repeated := seen[identity]; repeated {
+		return fmt.Errorf("%w: records %d and %d share the primary key %v", ErrInvalidResponse, first, row, key.ID)
+	}
+	seen[identity] = row
+	return nil
 }
 
 func projectRow(row map[string]any, projection []projectionField, allColumns bool, schema CollectionSchema) map[string]any {
