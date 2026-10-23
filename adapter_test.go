@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/dal-go/dalgo/dal"
-	"github.com/dal-go/dalgo/dtql"
+	"github.com/dal-go/dalgo/tugql"
 	dalrecord "github.com/dal-go/record"
 )
 
@@ -358,7 +358,7 @@ columns:
   - {field: id, source: c, as: countryId}
   - {aggregate: {function: sum, args: [{field: amount, source: o}]}, as: totalSales}
 `
-	q, err := dtql.Deserialize([]byte(doc))
+	q, err := tugql.Deserialize([]byte(doc))
 	if err != nil {
 		t.Fatal(err)
 	}
