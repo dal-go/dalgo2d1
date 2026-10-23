@@ -5,7 +5,7 @@ go 1.26.0
 toolchain go1.27.1
 
 require (
-	github.com/dal-go/dalgo v0.95.0
+	github.com/dal-go/dalgo v0.95.2
 	github.com/dal-go/record v0.1.5
 )
 
